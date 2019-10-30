@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+option go_package = "main";
+
+message ExampleMsg {
+    string simple_string = 1;
+    oneof complex_field {
+        string some_string = 2;
+        int64 some_number = 3;
+        bool some_bool = 4;
+    }
+}
