@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/aivahealth/cadence-proto-example/prototest"
 	"log"
 	"os"
 	"time"
@@ -26,24 +27,24 @@ func main() {
 		log.Fatal("Please set CADENCE_CLI_DOMAIN")
 	}
 
-	StartCadenceWorker(cadenceEndpoint, cadenceDomain)
-	cadenceClient = CadenceClient(cadenceEndpoint, cadenceDomain)
+	prototest.StartCadenceWorker(cadenceEndpoint, cadenceDomain)
+	cadenceClient = prototest.CadenceClient(cadenceEndpoint, cadenceDomain)
 
-	argIn := ExampleMsg{
+	argIn := prototest.ExampleMsg{
 		SimpleString: "Hello, world!",
-		ComplexField: &ExampleMsg_SomeNumber{
+		ComplexField: &prototest.ExampleMsg_SomeNumber{
 			SomeNumber: 111222333444555,
 		},
 	}
 
 	opts := client.StartWorkflowOptions{
 		ExecutionStartToCloseTimeout: time.Second * 60,
-		TaskList:                     taskList,
+		TaskList:                     prototest.TaskList,
 	}
 	run, err := cadenceClient.ExecuteWorkflow(
 		ctx,
 		opts,
-		ExampleWorkflow,
+		prototest.ExampleWorkflow,
 		&argIn,
 	)
 	if err != nil {
@@ -54,7 +55,8 @@ func main() {
 
 	err = run.Get(ctx, nil)
 	if err != nil {
-		panic(err)
+		log.Printf("Failure: %v", err.Error())
+		//panic(err)
 	}
 
 	log.Println("done")

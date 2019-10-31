@@ -1,8 +1,9 @@
-package main
+package prototest
 
 import (
 	"context"
 	"fmt"
+	"go.uber.org/cadence/activity"
 	"time"
 
 	"go.uber.org/cadence/workflow"
@@ -11,6 +12,7 @@ import (
 
 func init() {
 	workflow.Register(ExampleWorkflow)
+	activity.Register(ExampleActivity)
 }
 
 func ExampleWorkflow(
@@ -25,17 +27,17 @@ func ExampleWorkflow(
 	log := workflow.GetLogger(ctx)
 	log.Info("ExampleWorkflow", zap.Any("arg", arg))
 
-	// var result ExampleMsg
-	// err := workflow.ExecuteActivity(
-	// 	ctx,
-	// 	ExampleActivity,
-	// 	arg,
-	// ).Get(ctx, &result)
-	// if err != nil {
-	// 	return err
-	// }
+	var result ExampleMsg
+	err := workflow.ExecuteActivity(
+		ctx,
+		ExampleActivity,
+		arg,
+	).Get(ctx, &result)
+	if err != nil {
+		return err
+	}
 
-	// log.Info("Got result from activity", zap.Any("result", result))
+	log.Info("Got result from activity", zap.Any("result", result))
 
 	return nil
 }
