@@ -25,17 +25,17 @@ func ExampleWorkflow(
 	log := workflow.GetLogger(ctx)
 	log.Info("ExampleWorkflow", zap.Any("arg", arg))
 
-	var result ExampleMsg
-	err := workflow.ExecuteActivity(
-		ctx,
-		ExampleActivity,
-		arg,
-	).Get(ctx, &result)
-	if err != nil {
-		return err
-	}
+	// var result ExampleMsg
+	// err := workflow.ExecuteActivity(
+	// 	ctx,
+	// 	ExampleActivity,
+	// 	arg,
+	// ).Get(ctx, &result)
+	// if err != nil {
+	// 	return err
+	// }
 
-	log.Info("Got result from activity", zap.Any("result", result))
+	// log.Info("Got result from activity", zap.Any("result", result))
 
 	return nil
 }

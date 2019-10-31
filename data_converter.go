@@ -24,9 +24,13 @@ func (dc *CustomDataConverter) ToData(objs ...interface{}) ([]byte, error) {
 	result := &bytes.Buffer{}
 	for i, obj := range objs {
 		// Try jsonpb...
-		if pbObj := findProtoMessage(obj); pbObj != nil {
+		if isProtoMessage(obj) {
 			fmt.Printf("\n\n[CustomDataConverter.ToData()] Encoding a proto.Message: %T\n\n", obj)
 			curBytes := &bytes.Buffer{}
+			pbObj := findProtoMessageObject(obj)
+			if pbObj == nil {
+				return nil, fmt.Errorf("missing proto.Message argument at index %d of type %T", i, obj)
+			}
 			err := pbMarshaler.Marshal(curBytes, pbObj)
 			if err != nil {
 				if err == io.EOF {
@@ -64,14 +68,41 @@ func (dc *CustomDataConverter) FromData(data []byte, objs ...interface{}) error 
 		// fmt.Printf("\n\n[CustomDataConverter.FromData()] Ready to decode bytes:\n%s\n\n", string(intermediate))
 
 		// Try jsonpb...
-		if pbObj := findProtoMessage(obj); pbObj != nil {
-			fmt.Printf("\n\n[CustomDataConverter.FromData()] Decoding to a proto.Message: %T\nOriginal obj:\n----------\n%s\n----------\nCasted pbObj:\n----------\n%s\n\n", obj, spew.Sprintf("%#+v", obj), spew.Sprintf("%#+v", pbObj))
-			err := pbUnmarshaler.Unmarshal(bytes.NewReader(intermediate), pbObj)
+		if isProtoMessage(obj) {
+			fmt.Printf("\n\n[CustomDataConverter.FromData()] Decoding a proto.Message: %T\n\n", obj)
+
+			// Find the proto.Message!
+			q := reflect.ValueOf(obj)
+			for !q.Type().Implements(protoMessageIface) {
+				q = q.Elem()
+			}
+
+			// So now q is a (Value: *SomeStruct)
+			// which implements proto.Message
+
+			// If our proto.Message points to nil, we need to create a new
+			// zero value object, or jsonpb will freak out during unmarshal
+			if q.IsNil() {
+				concTyp :=findConcreteType(obj)
+				blankObjVal := reflect.Zero(concTyp)
+				blankObjPtrVal := reflect.New(concTyp)
+				blankObjPtrVal.Elem().Set(blankObjVal)
+				asIface := q.Interface().(proto.Message)
+				qq := reflect.ValueOf(&asIface).Elem()
+				qq.Set(blankObjPtrVal) // HELP! This isn't setting q to point to the new blank object! Why not?!
+			}
+
+			asProtoMsg := q.Interface().(proto.Message)
+			spew.Dump(asProtoMsg)
+			err := pbUnmarshaler.Unmarshal(bytes.NewReader(intermediate), asProtoMsg)
 			if err != nil {
 				return fmt.Errorf(
 					"unable to encode argument: %d, %v, with jsonpb error: %v", i, reflect.TypeOf(obj), err,
 				)
 			}
+
+			fmt.Printf("\n\n[CustomDataConverter.FromData()] Decoding result: %s\n\n", spew.Sdump(asProtoMsg))
+
 		} else {
 			// ... falling back to the default DC
 			fmt.Printf("\n\n[CustomDataConverter.FromData()] Decoding to a normal type: %T\n\n", obj)
@@ -89,12 +120,32 @@ var (
 	protoMessageIface = reflect.TypeOf((*proto.Message)(nil)).Elem()
 )
 
-func findProtoMessage(obj interface{}) proto.Message {
+// This is a safe check of Type objects only
+func isProtoMessage(obj interface{}) bool {
+	curTyp := reflect.TypeOf(obj)
+	prevTyp := curTyp
+	for curTyp.Kind() == reflect.Ptr {
+		prevTyp = curTyp
+		curTyp = curTyp.Elem()
+	}
+
+	if prevTyp.Implements(protoMessageIface) {
+		return true
+	}
+
+	return false
+}
+
+// This digs into values and returns the proto.Message that we know is lurking
+func findProtoMessageObject(obj interface{}) proto.Message {
 	// Strip all pointers away
 	curObj := obj
 	prevObj := obj
 	for reflect.TypeOf(curObj).Kind() == reflect.Ptr {
 		prevObj = curObj
+		if reflect.ValueOf(curObj).IsNil() {
+			break
+		}
 		curObj = reflect.ValueOf(curObj).Elem().Interface()
 	}
 
@@ -103,14 +154,13 @@ func findProtoMessage(obj interface{}) proto.Message {
 		return prevObj.(proto.Message)
 	}
 
-	// It's possible that curObj was a concrete type from the start,
-	// so we need to make a pointer to the original value and test that
-	ptrType := reflect.PtrTo(reflect.TypeOf(curObj))
-	if ptrType.Implements(protoMessageIface) {
-		// TODO: Now what?
-		// Ideally we would get the original value and slap a pointer on it, and return that.
-		// But how?
-	}
-
 	return nil
+}
+
+func findConcreteType(obj interface{}) reflect.Type {
+	typ := reflect.TypeOf(obj)
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return typ
 }
